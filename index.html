@@ -1,0 +1,1156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Heimweg · Route Optimizer</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0a0f;
+    --surface: #12121a;
+    --border: #1e1e2e;
+    --accent: #c8f064;
+    --accent2: #64b5f6;
+    --warn: #ffb74d;
+    --danger: #ef5350;
+    --text: #e8e8f0;
+    --muted: #6b6b85;
+    --card: #161622;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'JetBrains Mono', monospace;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    padding: 0;
+    overflow-x: hidden;
+  }
+
+  /* Noise texture overlay */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: 0;
+    opacity: 0.5;
+  }
+
+  .app {
+    position: relative;
+    z-index: 1;
+    max-width: 430px;
+    margin: 0 auto;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* Header */
+  header {
+    padding: 48px 24px 24px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .logo {
+    font-family: 'Syne', sans-serif;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 8px;
+  }
+
+  h1 {
+    font-family: 'Syne', sans-serif;
+    font-size: 28px;
+    font-weight: 800;
+    line-height: 1.1;
+    color: var(--text);
+  }
+
+  h1 span {
+    color: var(--accent);
+  }
+
+  .subtitle {
+    margin-top: 6px;
+    font-size: 11px;
+    color: var(--muted);
+    letter-spacing: 0.05em;
+  }
+
+  /* Station selector */
+  .station-picker {
+    padding: 24px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .label {
+    font-size: 10px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 12px;
+    display: block;
+  }
+
+  .station-grid {
+    display: grid;
+    gap: 8px;
+  }
+
+  .station-btn {
+    background: var(--card);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 14px 16px;
+    border-radius: 8px;
+    cursor: pointer;
+    text-align: left;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    transition: all 0.15s ease;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .station-btn::before {
+    content: '';
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    width: 3px;
+    background: var(--muted);
+    transition: background 0.15s;
+  }
+
+  .station-btn:hover {
+    border-color: var(--accent);
+    background: #1a1a28;
+  }
+
+  .station-btn.active {
+    border-color: var(--accent);
+    background: rgba(200, 240, 100, 0.06);
+  }
+
+  .station-btn.active::before {
+    background: var(--accent);
+  }
+
+  .station-icon {
+    font-size: 18px;
+    flex-shrink: 0;
+  }
+
+  .station-info strong {
+    display: block;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text);
+    font-family: 'Syne', sans-serif;
+  }
+
+  .station-info small {
+    font-size: 10px;
+    color: var(--muted);
+    letter-spacing: 0.05em;
+  }
+
+  .station-tags {
+    margin-left: auto;
+    display: flex;
+    gap: 4px;
+    flex-shrink: 0;
+  }
+
+  .tag {
+    font-size: 9px;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+  }
+
+  .tag-s3 { background: #3c763d; color: #fff; }
+  .tag-s5 { background: #d9534f; color: #fff; }
+  .tag-s7 { background: #8b5cf6; color: #fff; }
+
+  /* GPS button */
+  .gps-btn {
+    width: 100%;
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--accent2);
+    padding: 12px 16px;
+    border-radius: 8px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+
+  .gps-btn:hover { border-color: var(--accent2); background: rgba(100,181,246,0.05); }
+  .gps-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  .gps-status {
+    font-size: 10px;
+    color: var(--muted);
+    text-align: center;
+    min-height: 16px;
+    margin-bottom: 10px;
+    letter-spacing: 0.04em;
+    transition: color 0.2s;
+  }
+
+  .gps-status.locating { color: var(--accent2); }
+  .gps-status.found    { color: var(--accent); }
+  .gps-status.error    { color: var(--danger); }
+
+  .station-btn.gps-match {
+    border-color: var(--accent2);
+    background: rgba(100, 181, 246, 0.06);
+  }
+  .station-btn.gps-match::before { background: var(--accent2); }
+
+  /* Calculate button */
+  .calc-wrap {
+    padding: 16px 24px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .calc-btn {
+    width: 100%;
+    background: var(--accent);
+    color: #0a0a0f;
+    border: none;
+    padding: 16px;
+    border-radius: 8px;
+    font-family: 'Syne', sans-serif;
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+  }
+
+  .calc-btn:hover { background: #d4f07a; transform: translateY(-1px); }
+  .calc-btn:active { transform: translateY(0); }
+  .calc-btn:disabled { background: var(--muted); cursor: not-allowed; transform: none; color: var(--bg); }
+
+  .clock-display {
+    margin-top: 10px;
+    text-align: center;
+    font-size: 11px;
+    color: var(--muted);
+  }
+
+  #live-clock {
+    color: var(--accent2);
+    font-weight: 500;
+  }
+
+  /* Results */
+  .results {
+    padding: 24px;
+    flex: 1;
+  }
+
+  .result-label {
+    font-size: 10px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 16px;
+    display: block;
+  }
+
+  .route-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    margin-bottom: 12px;
+    overflow: hidden;
+    transition: all 0.2s ease;
+    animation: slideIn 0.3s ease forwards;
+    opacity: 0;
+    transform: translateY(10px);
+  }
+
+  @keyframes slideIn {
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .route-card:nth-child(2) { animation-delay: 0.1s; }
+
+  .route-card.winner {
+    border-color: var(--accent);
+    background: rgba(200, 240, 100, 0.04);
+  }
+
+  .route-card.loser {
+    opacity: 0.65;
+  }
+
+  .route-header {
+    padding: 14px 16px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .route-badge {
+    font-family: 'Syne', sans-serif;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding: 4px 10px;
+    border-radius: 4px;
+  }
+
+  .badge-best {
+    background: var(--accent);
+    color: #0a0a0f;
+  }
+
+  .badge-alt {
+    background: var(--border);
+    color: var(--muted);
+  }
+
+  .route-title {
+    font-family: 'Syne', sans-serif;
+    font-size: 14px;
+    font-weight: 700;
+    flex: 1;
+  }
+
+  .route-eta {
+    font-size: 20px;
+    font-weight: 500;
+    color: var(--accent);
+    font-family: 'Syne', sans-serif;
+  }
+
+  .route-eta.slow { color: var(--warn); }
+  .route-eta.bad { color: var(--danger); }
+
+  .route-steps {
+    padding: 14px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .step {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    font-size: 12px;
+  }
+
+  .step-line {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    flex-shrink: 0;
+    width: 28px;
+  }
+
+  .step-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--muted);
+    flex-shrink: 0;
+    margin-top: 3px;
+  }
+
+  .step-dot.active { background: var(--accent); }
+  .step-dot.tram { background: var(--accent2); }
+
+  .step-connector {
+    width: 1px;
+    flex: 1;
+    background: var(--border);
+    min-height: 16px;
+    margin: 3px 0;
+  }
+
+  .step-content {
+    flex: 1;
+    padding-bottom: 8px;
+  }
+
+  .step-action {
+    color: var(--text);
+    line-height: 1.4;
+  }
+
+  .step-timing {
+    font-size: 10px;
+    color: var(--muted);
+    margin-top: 2px;
+  }
+
+  .step-timing.highlight {
+    color: var(--warn);
+  }
+
+  .step-timing.ok {
+    color: var(--accent);
+  }
+
+  .line-pill {
+    display: inline-block;
+    font-size: 10px;
+    font-weight: 700;
+    padding: 1px 6px;
+    border-radius: 3px;
+    margin-right: 4px;
+  }
+
+  /* Loading state */
+  .loading {
+    text-align: center;
+    padding: 40px 24px;
+    color: var(--muted);
+    font-size: 12px;
+  }
+
+  .spinner {
+    display: inline-block;
+    width: 20px;
+    height: 20px;
+    border: 2px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    margin-bottom: 12px;
+  }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* Empty state */
+  .empty {
+    text-align: center;
+    padding: 40px 24px;
+    color: var(--muted);
+  }
+
+  .empty-icon {
+    font-size: 40px;
+    margin-bottom: 12px;
+    display: block;
+    opacity: 0.4;
+  }
+
+  .empty p {
+    font-size: 12px;
+    line-height: 1.6;
+  }
+
+  /* Error */
+  .error-msg {
+    background: rgba(239, 83, 80, 0.1);
+    border: 1px solid rgba(239, 83, 80, 0.3);
+    border-radius: 8px;
+    padding: 14px 16px;
+    font-size: 12px;
+    color: #ef9a9a;
+    line-height: 1.5;
+  }
+
+  /* Tram schedule badge */
+  .tram-times {
+    background: rgba(100, 181, 246, 0.06);
+    border: 1px solid rgba(100, 181, 246, 0.2);
+    border-radius: 8px;
+    padding: 12px 16px;
+    margin-bottom: 16px;
+    animation: slideIn 0.3s ease forwards;
+    opacity: 0;
+  }
+
+  .tram-times-label {
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--accent2);
+    margin-bottom: 8px;
+  }
+
+  .tram-time-row {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-top: 6px;
+  }
+
+  .tram-time-chip {
+    font-size: 11px;
+    padding: 3px 8px;
+    border-radius: 4px;
+    background: rgba(100, 181, 246, 0.12);
+    color: var(--accent2);
+    font-weight: 500;
+  }
+
+  .tram-time-chip.catchable {
+    background: rgba(200, 240, 100, 0.12);
+    color: var(--accent);
+  }
+
+  /* Footer */
+  footer {
+    padding: 16px 24px;
+    border-top: 1px solid var(--border);
+    text-align: center;
+    font-size: 10px;
+    color: var(--muted);
+    letter-spacing: 0.05em;
+  }
+
+  .refresh-note {
+    margin-top: 4px;
+    color: #3d3d52;
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div class="logo">BVG · Route Optimizer</div>
+    <h1>Heim<span>weg</span></h1>
+    <div class="subtitle">S-Bahn → Tram 21 → Blockdammweg</div>
+  </header>
+
+  <div class="station-picker">
+    <span class="label">📍 Where are you now?</span>
+    <button class="gps-btn" id="gps-btn" onclick="detectLocation()">
+      <span>◎</span> Detect My Station Automatically
+    </button>
+    <div class="gps-status" id="gps-status">or tap a station below</div>
+    <div class="station-grid" id="station-grid"></div>
+  </div>
+
+  <div class="calc-wrap">
+    <button class="calc-btn" id="calc-btn" onclick="calculate()">
+      <span>⚡</span> Calculate Best Route
+    </button>
+    <div class="clock-display">Current time: <span id="live-clock">--:--:--</span></div>
+  </div>
+
+  <div class="results" id="results">
+    <div class="empty">
+      <span class="empty-icon">🚆</span>
+      <p>Select your current station<br>and tap Calculate to find<br>your fastest route home.</p>
+    </div>
+  </div>
+
+  <footer>
+    Data via BVG Hafas API · Live departures
+    <div class="refresh-note">Results update each time you calculate</div>
+  </footer>
+</div>
+
+<script>
+// ─── CONFIGURATION ───────────────────────────────────────────────────────────
+const CONFIG = {
+  // Walk times in minutes
+  rummelsburgToTram21Stop: 2,   // Rummelsburg S-Bahn → Tram 21 stop
+  ostkreuzToRummelsburg: 7,     // Ostkreuz → Rummelsburg (walk)
+  tram21Frequency: 20,          // minutes between trams
+
+  // BVG station IDs (Hafas)
+  stations: [
+    {
+      id: 'ostkreuz',
+      name: 'Ostkreuz',
+      hafasId: '900024101',
+      lines: ['S3', 'S5', 'S7', 'S75'],
+      note: 'All S lines stop here',
+      tags: ['S3', 'S5', 'S7'],
+      icon: '🔴',
+      lat: 52.5031,
+      lon: 13.4698,
+      routes: {
+        walkOnly: true,
+        walkMinutes: 7,
+      }
+    },
+    {
+      id: 'warschauer',
+      name: 'Warschauer Str.',
+      hafasId: '900058101',
+      lines: ['S3', 'S5', 'S7', 'S75'],
+      note: 'Before Ostkreuz',
+      tags: ['S3', 'S5', 'S7'],
+      icon: '🟡',
+      lat: 52.5062,
+      lon: 13.4490,
+    },
+    {
+      id: 'ostbahnhof',
+      name: 'Ostbahnhof',
+      hafasId: '900120025',
+      lines: ['S3', 'S5', 'S7'],
+      note: 'S3, S5, S7 stop here',
+      tags: ['S3', 'S5', 'S7'],
+      icon: '🟠',
+      lat: 52.5103,
+      lon: 13.4346,
+    },
+    {
+      id: 'alexanderplatz',
+      name: 'Alexanderplatz',
+      hafasId: '900100003',
+      lines: ['S3', 'S5', 'S7', 'S75'],
+      note: 'Multiple S lines',
+      tags: ['S3', 'S5', 'S7'],
+      icon: '🔵',
+      lat: 52.5219,
+      lon: 13.4132,
+    },
+    {
+      id: 'hackescher',
+      name: 'Hackescher Markt',
+      hafasId: '900100004',
+      lines: ['S3', 'S5', 'S7'],
+      note: 'S3, S5, S7',
+      tags: ['S3', 'S5', 'S7'],
+      icon: '🟤',
+      lat: 52.5230,
+      lon: 13.4019,
+    },
+    {
+      id: 'friedrichstr',
+      name: 'Friedrichstraße',
+      hafasId: '900100001',
+      lines: ['S3', 'S5', 'S7'],
+      note: 'S3, S5, S7',
+      tags: ['S3', 'S5', 'S7'],
+      icon: '⚫',
+      lat: 52.5204,
+      lon: 13.3878,
+    },
+  ],
+
+  // S Rummelsburg stop — serves both S-Bahn and Tram 21
+  rummelsburgHafasId: '900160001',
+  // Tram 21 departs from the same stop complex
+  tram21HafasId: '900160001',
+};
+
+// ─── STATE ────────────────────────────────────────────────────────────────────
+let selectedStation = null;
+
+// ─── GEOLOCATION ──────────────────────────────────────────────────────────────
+function detectLocation() {
+  if (!navigator.geolocation) {
+    setGpsStatus('Geolocation not supported on this device', 'error');
+    return;
+  }
+
+  const btn = document.getElementById('gps-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner" style="width:14px;height:14px;border-width:2px"></span> Locating…';
+  setGpsStatus('Requesting location…', 'locating');
+
+  navigator.geolocation.getCurrentPosition(
+    (pos) => {
+      const { latitude, longitude } = pos.coords;
+      const nearest = findNearestStation(latitude, longitude);
+
+      // Clear any previous GPS highlight
+      document.querySelectorAll('.station-btn').forEach(b => b.classList.remove('gps-match'));
+
+      // Select it
+      selectStation(nearest.station.id, true);
+
+      const distM = Math.round(nearest.distKm * 1000);
+      setGpsStatus(`📍 ${nearest.station.name} · ${distM < 1000 ? distM + 'm away' : (nearest.distKm).toFixed(1) + 'km away'}`, 'found');
+
+      btn.disabled = false;
+      btn.innerHTML = '<span>◎</span> Detect My Station Automatically';
+    },
+    (err) => {
+      let msg = 'Location access denied';
+      if (err.code === 1) msg = 'Location permission denied — tap a station manually';
+      if (err.code === 2) msg = 'Position unavailable — try again';
+      if (err.code === 3) msg = 'Location timed out — try again';
+      setGpsStatus(msg, 'error');
+      btn.disabled = false;
+      btn.innerHTML = '<span>◎</span> Detect My Station Automatically';
+    },
+    { enableHighAccuracy: true, timeout: 10000, maximumAge: 30000 }
+  );
+}
+
+function findNearestStation(lat, lon) {
+  let nearest = null;
+  let minDist = Infinity;
+
+  for (const s of CONFIG.stations) {
+    const d = haversineKm(lat, lon, s.lat, s.lon);
+    if (d < minDist) {
+      minDist = d;
+      nearest = s;
+    }
+  }
+
+  return { station: nearest, distKm: minDist };
+}
+
+// Haversine formula — distance between two lat/lon points in km
+function haversineKm(lat1, lon1, lat2, lon2) {
+  const R = 6371;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a = Math.sin(dLat/2) ** 2 +
+            Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon/2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function toRad(deg) { return deg * Math.PI / 180; }
+
+function setGpsStatus(msg, type = '') {
+  const el = document.getElementById('gps-status');
+  el.textContent = msg;
+  el.className = 'gps-status ' + type;
+}
+
+// ─── INIT ─────────────────────────────────────────────────────────────────────
+function init() {
+  renderStations();
+  startClock();
+}
+
+function renderStations() {
+  const grid = document.getElementById('station-grid');
+  grid.innerHTML = CONFIG.stations.map(s => `
+    <button class="station-btn" id="btn-${s.id}" onclick="selectStation('${s.id}', false)">
+      <span class="station-icon">${s.icon}</span>
+      <div class="station-info">
+        <strong>${s.name}</strong>
+        <small>${s.note}</small>
+      </div>
+      <div class="station-tags">
+        ${s.tags.map(t => `<span class="tag tag-${t.toLowerCase().replace('/','')}">${t}</span>`).join('')}
+      </div>
+    </button>
+  `).join('');
+}
+
+function selectStation(id, fromGps = false) {
+  selectedStation = id;
+  document.querySelectorAll('.station-btn').forEach(b => {
+    b.classList.remove('active', 'gps-match');
+  });
+  const btn = document.getElementById(`btn-${id}`);
+  if (btn) {
+    btn.classList.add(fromGps ? 'gps-match' : 'active');
+    // Scroll it into view smoothly
+    btn.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+}
+
+function startClock() {
+  function tick() {
+    const now = new Date();
+    document.getElementById('live-clock').textContent =
+      now.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  }
+  tick();
+  setInterval(tick, 1000);
+}
+
+// ─── BVG API ──────────────────────────────────────────────────────────────────
+async function fetchDepartures(stationId, lines, minutes = 60) {
+  // BVG REST API v5 (public, no auth needed)
+  const url = `https://v6.bvg.transport.rest/stops/${stationId}/departures?duration=${minutes}&results=20&suburban=true&tram=true&subway=false&bus=false&ferry=false&express=false&regional=false`;
+
+  const resp = await fetch(url);
+  if (!resp.ok) throw new Error(`BVG API error: ${resp.status}`);
+  const data = await resp.json();
+
+  const deps = (data.departures || []).filter(d => {
+    const lineName = d.line?.name || '';
+    return lines.some(l => lineName === l || lineName.startsWith(l));
+  });
+
+  return deps.map(d => {
+    const when = d.when || d.plannedWhen;
+    const dt = new Date(when);
+    const nowMs = Date.now();
+    const minutesAway = Math.round((dt - nowMs) / 60000);
+    return {
+      line: d.line?.name,
+      direction: d.direction,
+      minutesAway,
+      scheduledTime: dt,
+      delay: d.delay ? Math.round(d.delay / 60) : 0,
+    };
+  }).filter(d => d.minutesAway >= 0).sort((a, b) => a.minutesAway - b.minutesAway);
+}
+
+async function fetchTram21Departures(stationId, minutes = 90) {
+  const url = `https://v6.bvg.transport.rest/stops/${stationId}/departures?duration=${minutes}&results=30&suburban=false&tram=true&subway=false&bus=false&ferry=false&express=false&regional=false`;
+  const resp = await fetch(url);
+  if (!resp.ok) throw new Error(`BVG API tram error: ${resp.status}`);
+  const data = await resp.json();
+
+  return (data.departures || [])
+    .filter(d => d.line?.name === '21' || d.line?.name === 'M21' ||
+                 (d.line?.name || '').includes('21'))
+    .filter(d => {
+      const dir = (d.direction || '').toLowerCase();
+      // Blockdammweg is on the S Schöneweide branch, NOT Marktstraße
+      return dir.includes('schöneweide') || dir.includes('schoeneweide') ||
+             dir.includes('blockdammweg') || dir.includes('köpenick');
+    })
+    .map(d => {
+      const when = d.when || d.plannedWhen;
+      const dt = new Date(when);
+      const minutesAway = Math.round((dt - Date.now()) / 60000);
+      return { minutesAway, scheduledTime: dt, direction: d.direction };
+    })
+    .filter(d => d.minutesAway >= 0)
+    .sort((a, b) => a.minutesAway - b.minutesAway);
+}
+
+// ─── ROUTE CALCULATION ────────────────────────────────────────────────────────
+async function calculate() {
+  if (!selectedStation) {
+    alert('Please select your current station first!');
+    return;
+  }
+
+  const btn = document.getElementById('calc-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span>';
+
+  const resultsEl = document.getElementById('results');
+  resultsEl.innerHTML = `<div class="loading"><div class="spinner"></div><br>Fetching live departures…</div>`;
+
+  try {
+    const station = CONFIG.stations.find(s => s.id === selectedStation);
+
+    // If user is already at Ostkreuz
+    if (station.id === 'ostkreuz') {
+      await calculateFromOstkreuz(station, resultsEl);
+    } else {
+      await calculateFromUpstream(station, resultsEl);
+    }
+
+  } catch (err) {
+    document.getElementById('results').innerHTML = `
+      <div class="error-msg">
+        ⚠️ Could not fetch live data: ${err.message}<br><br>
+        Make sure you have internet access. The BVG API may occasionally be unavailable.
+      </div>`;
+    console.error(err);
+  }
+
+  btn.disabled = false;
+  btn.innerHTML = '<span>⚡</span> Calculate Best Route';
+}
+
+async function calculateFromOstkreuz(station, resultsEl) {
+  // Already at Ostkreuz: just walk 7 min to Rummelsburg, then catch Tram 21
+  const tram21 = await fetchTram21Departures(CONFIG.tram21HafasId);
+  const walkToRummelsburg = CONFIG.ostkreuzToRummelsburg; // 7 min walk
+
+  // First tram you can catch (need 7 min to walk there + 2 min buffer)
+  const catchableTrams = tram21.filter(t => t.minutesAway >= walkToRummelsburg + 1);
+
+  renderOstkreuzResult(walkToRummelsburg, tram21, catchableTrams, resultsEl);
+}
+
+function renderOstkreuzResult(walkMin, allTrams, catchable, resultsEl) {
+  const first = catchable[0];
+  const waitAtStop = first ? first.minutesAway - walkMin : null;
+  const totalMins = first ? first.minutesAway : null;
+
+  const tramTimesHtml = renderTramTimes(allTrams, catchable);
+
+  resultsEl.innerHTML = tramTimesHtml + `
+    <span class="result-label">Your route from Ostkreuz</span>
+    <div class="route-card winner">
+      <div class="route-header">
+        <span class="route-badge badge-best">Only Route</span>
+        <span class="route-title">Walk → Tram 21</span>
+        <span class="route-eta ${totalMins > 30 ? 'slow' : ''}">${totalMins !== null ? totalMins + ' min' : '?'}</span>
+      </div>
+      <div class="route-steps">
+        ${step('active', '🚶', 'Walk to Rummelsburg S-Bahn / Tram stop', `${walkMin} min walk`, 'ok')}
+        ${stepConnector()}
+        ${step('tram', '🚋', `Board Tram 21 → Blockdammweg`, first ? `Departs in ${first.minutesAway} min${waitAtStop > 2 ? ` · wait ~${waitAtStop} min at stop` : ''}` : 'No tram data available', waitAtStop > 8 ? 'highlight' : 'ok')}
+        ${stepConnector()}
+        ${step('', '🏠', 'Blockdammweg — you\'re home!', '', '')}
+      </div>
+    </div>
+  `;
+}
+
+async function calculateFromUpstream(station, resultsEl) {
+  // Fetch next S3 and next S5/S7 departures from current station
+  const [s3Deps, s5s7Deps, tramDeps] = await Promise.all([
+    fetchDepartures(station.hafasId, ['S3']),
+    fetchDepartures(station.hafasId, ['S5', 'S7', 'S75']),
+    fetchTram21Departures(CONFIG.tram21HafasId, 120),
+  ]);
+
+  // Travel times: approximate based on typical BVG journey
+  // S3 → Rummelsburg: depends on station, we use rough estimates
+  const s3TravelToRummelsburg = stationToRummelsburgMins(station.id, 'S3');
+  const s5s7TravelToOstkreuz = stationToOstkreuzMins(station.id);
+
+  const nextS3 = s3Deps[0];
+  const nextS5S7 = s5s7Deps[0];
+
+  // Route A: S3 → Rummelsburg → 2 min walk → Tram 21
+  const routeA = computeRouteA(nextS3, s3TravelToRummelsburg, tramDeps);
+
+  // Route B: S5/S7 → Ostkreuz → 7 min walk → Rummelsburg → Tram 21
+  const routeB = computeRouteB(nextS5S7, s5s7TravelToOstkreuz, tramDeps);
+
+  renderResults(routeA, routeB, station, tramDeps, resultsEl);
+}
+
+function computeRouteA(nextTrain, travelMins, tramDeps) {
+  if (!nextTrain) return { available: false, reason: 'No S3 departures found' };
+
+  // Arrive at Rummelsburg
+  const arriveAtRummelsburg = nextTrain.minutesAway + travelMins;
+  // Then 2 min walk to Tram stop
+  const atTramStop = arriveAtRummelsburg + CONFIG.rummelsburgToTram21Stop;
+
+  // Find first catchable tram
+  const catchable = tramDeps.filter(t => t.minutesAway >= atTramStop);
+  const tram = catchable[0];
+
+  return {
+    available: true,
+    trainLine: nextTrain.line,
+    trainIn: nextTrain.minutesAway,
+    trainDelay: nextTrain.delay,
+    arriveRummelsburg: arriveAtRummelsburg,
+    atTramStop,
+    tram,
+    waitAtStop: tram ? tram.minutesAway - atTramStop : null,
+    totalMins: tram ? tram.minutesAway : null,
+    travelMins,
+  };
+}
+
+function computeRouteB(nextTrain, travelMins, tramDeps) {
+  if (!nextTrain) return { available: false, reason: 'No S5/S7 departures found' };
+
+  const arriveAtOstkreuz = nextTrain.minutesAway + travelMins;
+  const atTramStop = arriveAtOstkreuz + CONFIG.ostkreuzToRummelsburg;
+
+  const catchable = tramDeps.filter(t => t.minutesAway >= atTramStop);
+  const tram = catchable[0];
+
+  return {
+    available: true,
+    trainLine: nextTrain.line,
+    trainIn: nextTrain.minutesAway,
+    trainDelay: nextTrain.delay,
+    arriveOstkreuz: arriveAtOstkreuz,
+    atTramStop,
+    tram,
+    waitAtStop: tram ? tram.minutesAway - atTramStop : null,
+    totalMins: tram ? tram.minutesAway : null,
+    travelMins,
+  };
+}
+
+function renderResults(routeA, routeB, station, tramDeps, resultsEl) {
+  // Determine winner
+  let winnerA = false, winnerB = false;
+  if (routeA.available && routeB.available && routeA.totalMins !== null && routeB.totalMins !== null) {
+    winnerA = routeA.totalMins <= routeB.totalMins;
+    winnerB = !winnerA;
+  } else if (routeA.available && routeA.totalMins !== null) {
+    winnerA = true;
+  } else if (routeB.available && routeB.totalMins !== null) {
+    winnerB = true;
+  }
+
+  const tramTimesHtml = renderTramTimes(tramDeps,
+    tramDeps.filter(t => t.minutesAway >= Math.min(
+      routeA.atTramStop || 99,
+      routeB.atTramStop || 99
+    ))
+  );
+
+  let html = tramTimesHtml + `<span class="result-label">Route comparison — ${station.name}</span>`;
+
+  // Route A card
+  if (routeA.available) {
+    html += `
+    <div class="route-card ${winnerA ? 'winner' : 'loser'}">
+      <div class="route-header">
+        <span class="route-badge ${winnerA ? 'badge-best' : 'badge-alt'}">${winnerA ? '✓ Best' : 'Slower'}</span>
+        <span class="route-title">S3 → Rummelsburg</span>
+        <span class="route-eta ${etaClass(routeA.totalMins)}">${routeA.totalMins !== null ? routeA.totalMins + ' min' : '—'}</span>
+      </div>
+      <div class="route-steps">
+        ${step('active', '🚆', `Board <b>${routeA.trainLine}</b> toward Erkner / Rummelsburg`,
+          `Departs in <b>${routeA.trainIn} min</b>${routeA.trainDelay ? ` (${routeA.trainDelay > 0 ? '+' : ''}${routeA.trainDelay} min delay)` : ''}`,
+          routeA.trainDelay > 2 ? 'highlight' : 'ok')}
+        ${stepConnector()}
+        ${step('', '🚉', 'Alight at Rummelsburg S-Bahn',
+          `~${routeA.arriveRummelsburg} min from now · ${routeA.travelMins} min ride`, '')}
+        ${stepConnector()}
+        ${step('', '🚶', `Walk to Tram 21 stop`,
+          `${CONFIG.rummelsburgToTram21Stop} min · arrive at stop in ~${routeA.atTramStop} min`, 'ok')}
+        ${stepConnector()}
+        ${step('tram', '🚋', `Tram 21 → Blockdammweg`,
+          routeA.tram
+            ? `Departs in ${routeA.tram.minutesAway} min · wait ~${Math.max(0, routeA.waitAtStop)} min at stop`
+            : 'No tram data',
+          routeA.waitAtStop > 8 ? 'highlight' : 'ok')}
+        ${stepConnector()}
+        ${step('', '🏠', 'Blockdammweg', '', '')}
+      </div>
+    </div>`;
+  } else {
+    html += `<div class="route-card loser"><div class="route-header">
+      <span class="route-badge badge-alt">Route A</span>
+      <span class="route-title">S3 → Rummelsburg</span>
+      <span class="route-eta bad">N/A</span>
+    </div><div class="route-steps"><div class="step"><div class="step-content"><div class="step-action" style="color:var(--muted)">${routeA.reason}</div></div></div></div></div>`;
+  }
+
+  // Route B card
+  if (routeB.available) {
+    html += `
+    <div class="route-card ${winnerB ? 'winner' : 'loser'}">
+      <div class="route-header">
+        <span class="route-badge ${winnerB ? 'badge-best' : 'badge-alt'}">${winnerB ? '✓ Best' : 'Slower'}</span>
+        <span class="route-title">${routeB.trainLine} → Ostkreuz</span>
+        <span class="route-eta ${etaClass(routeB.totalMins)}">${routeB.totalMins !== null ? routeB.totalMins + ' min' : '—'}</span>
+      </div>
+      <div class="route-steps">
+        ${step('active', '🚆', `Board <b>${routeB.trainLine}</b> toward Erkner / Spandau`,
+          `Departs in <b>${routeB.trainIn} min</b>${routeB.trainDelay ? ` (${routeB.trainDelay > 0 ? '+' : ''}${routeB.trainDelay} min delay)` : ''}`,
+          routeB.trainDelay > 2 ? 'highlight' : 'ok')}
+        ${stepConnector()}
+        ${step('', '🚉', 'Alight at Ostkreuz',
+          `~${routeB.arriveOstkreuz} min from now · ${routeB.travelMins} min ride`, '')}
+        ${stepConnector()}
+        ${step('', '🚶', `Walk to Rummelsburg / Tram 21 stop`,
+          `${CONFIG.ostkreuzToRummelsburg} min walk · arrive in ~${routeB.atTramStop} min`, 'ok')}
+        ${stepConnector()}
+        ${step('tram', '🚋', `Tram 21 → Blockdammweg`,
+          routeB.tram
+            ? `Departs in ${routeB.tram.minutesAway} min · wait ~${Math.max(0, routeB.waitAtStop)} min at stop`
+            : 'No tram data',
+          routeB.waitAtStop > 8 ? 'highlight' : 'ok')}
+        ${stepConnector()}
+        ${step('', '🏠', 'Blockdammweg', '', '')}
+      </div>
+    </div>`;
+  }
+
+  resultsEl.innerHTML = html;
+}
+
+function renderTramTimes(allTrams, catchable) {
+  if (!allTrams.length) return '';
+  const catchableSet = new Set(catchable.map(t => t.minutesAway));
+  const shown = allTrams.slice(0, 5);
+  return `
+  <div class="tram-times">
+    <div class="tram-times-label">🚋 Next Tram 21 → Blockdammweg</div>
+    <div class="tram-time-row">
+      ${shown.map(t => `
+        <span class="tram-time-chip ${catchableSet.has(t.minutesAway) ? 'catchable' : ''}">
+          +${t.minutesAway}min
+        </span>`).join('')}
+    </div>
+    <div style="font-size:10px;color:var(--muted);margin-top:8px;">
+      <span style="color:var(--accent)">■</span> catchable &nbsp; <span style="color:var(--muted)">■</span> too soon
+    </div>
+  </div>`;
+}
+
+// ─── HELPERS ──────────────────────────────────────────────────────────────────
+function step(dotClass, icon, action, timing, timingClass) {
+  return `
+  <div class="step">
+    <div class="step-line">
+      <div class="step-dot ${dotClass}"></div>
+    </div>
+    <div class="step-content">
+      <div class="step-action">${icon} ${action}</div>
+      ${timing ? `<div class="step-timing ${timingClass}">${timing}</div>` : ''}
+    </div>
+  </div>`;
+}
+
+function stepConnector() {
+  return `<div class="step"><div class="step-line" style="padding-top:0"><div class="step-connector"></div></div><div class="step-content"></div></div>`;
+}
+
+function etaClass(mins) {
+  if (mins === null) return 'bad';
+  if (mins > 35) return 'slow';
+  return '';
+}
+
+// Rough travel time estimates (minutes) from each station to Rummelsburg via S3
+function stationToRummelsburgMins(stationId, line) {
+  const times = {
+    friedrichstr: 15,
+    hackescher: 12,
+    alexanderplatz: 10,
+    ostbahnhof: 7,
+    warschauer: 5,
+    ostkreuz: 3,
+  };
+  return times[stationId] || 10;
+}
+
+// Travel time to Ostkreuz via S5/S7
+function stationToOstkreuzMins(stationId) {
+  const times = {
+    friedrichstr: 14,
+    hackescher: 11,
+    alexanderplatz: 9,
+    ostbahnhof: 6,
+    warschauer: 4,
+    ostkreuz: 0,
+  };
+  return times[stationId] || 8;
+}
+
+// ─── START ────────────────────────────────────────────────────────────────────
+init();
+</script>
+</body>
+</html>
