@@ -288,7 +288,23 @@
   }
 
   .route-card.loser {
-    opacity: 0.65;
+    opacity: 0.6;
+  }
+
+  .route-card.loser .route-header {
+    padding: 8px 12px;
+    border-bottom: none;
+  }
+
+  .route-card.loser .route-summary {
+    display: none;
+  }
+
+  .loser-summary {
+    padding: 0 12px 8px;
+    font-size: 11px;
+    color: var(--muted);
+    line-height: 1.5;
   }
 
   .route-header {
@@ -327,8 +343,8 @@
   }
 
   .route-eta {
-    font-size: 20px;
-    font-weight: 500;
+    font-size: 15px;
+    font-weight: 700;
     color: var(--accent);
     font-family: 'Syne', sans-serif;
   }
@@ -1057,22 +1073,23 @@ function computeRouteOther(nextTrain, travelMins, tramDeps) {
 }
 
 function renderResults(routeS3, routeOther, station, resultsEl) {
-  // Winner = whoever gets home first
   const s3Total = routeS3.available ? routeS3.totalMins : Infinity;
   const otherTotal = routeOther.available ? routeOther.totalMins : Infinity;
   const s3Wins = s3Total !== null && s3Total <= otherTotal;
 
-  let html = `<span class="result-label">from ${station.name}</span>`;
+  let html = '';
 
   // ── S3 card ──
   if (routeS3.available) {
+    const isWinner = s3Wins;
     html += `
-    <div class="route-card ${s3Wins ? 'winner' : 'loser'}">
+    <div class="route-card ${isWinner ? 'winner' : 'loser'}">
       <div class="route-header">
-        <span class="route-badge ${s3Wins ? 'badge-best' : 'badge-alt'}">${s3Wins ? '✓ Take this' : 'Slower'}</span>
+        <span class="route-badge ${isWinner ? 'badge-best' : 'badge-alt'}">${isWinner ? '✓ Take this' : 'Slower'}</span>
         <span class="route-title">S3</span>
-        ${routeS3.homeTime ? `<span class="route-eta ${s3Wins ? '' : 'slow'}">🏠 ${routeS3.homeTime}</span>` : ''}
+        ${routeS3.homeTime ? `<span class="route-eta ${isWinner ? '' : 'slow'}">🏠 ${routeS3.homeTime}</span>` : ''}
       </div>
+      ${isWinner ? `
       <div class="route-summary">
         <div class="summary-row">
           <span class="summary-icon">🚆</span>
@@ -1080,25 +1097,30 @@ function renderResults(routeS3, routeOther, station, resultsEl) {
         </div>
         <div class="summary-row">
           <span class="summary-icon">🚋</span>
-          <span>Tram 21 in <b>${routeS3.tram ? routeS3.tram.minutesAway : '?'} min</b>${routeS3.waitAtStop > 1 ? ` · ${routeS3.waitAtStop} min wait at stop` : ' · straight on'}</span>
+          <span>Tram 21 in <b>${routeS3.tram ? routeS3.tram.minutesAway : '?'} min</b>${routeS3.waitAtStop > 1 ? ` · ${routeS3.waitAtStop} min wait` : ' · straight on'}</span>
         </div>
         <div class="summary-row home-row">
           <span class="summary-icon">🏠</span>
           <span>Home by <b>${routeS3.homeTime || '?'}</b></span>
         </div>
-      </div>
+      </div>` : `
+      <div class="loser-summary">
+        S3 in ${routeS3.trainIn} min · Tram in ${routeS3.tram ? routeS3.tram.minutesAway : '?'} min · home ${routeS3.homeTime || '?'}
+      </div>`}
     </div>`;
   }
 
   // ── Others card ──
   if (routeOther.available) {
+    const isWinner = !s3Wins;
     html += `
-    <div class="route-card ${!s3Wins ? 'winner' : 'loser'}">
+    <div class="route-card ${isWinner ? 'winner' : 'loser'}">
       <div class="route-header">
-        <span class="route-badge ${!s3Wins ? 'badge-best' : 'badge-alt'}">${!s3Wins ? '✓ Take this' : 'Slower'}</span>
+        <span class="route-badge ${isWinner ? 'badge-best' : 'badge-alt'}">${isWinner ? '✓ Take this' : 'Slower'}</span>
         <span class="route-title">Others <span style="font-size:11px;font-weight:400;color:var(--muted)">(${routeOther.trainLine})</span></span>
-        ${routeOther.homeTime ? `<span class="route-eta ${!s3Wins ? '' : 'slow'}">🏠 ${routeOther.homeTime}</span>` : ''}
+        ${routeOther.homeTime ? `<span class="route-eta ${isWinner ? '' : 'slow'}">🏠 ${routeOther.homeTime}</span>` : ''}
       </div>
+      ${isWinner ? `
       <div class="route-summary">
         <div class="summary-row">
           <span class="summary-icon">🚆</span>
@@ -1106,13 +1128,16 @@ function renderResults(routeS3, routeOther, station, resultsEl) {
         </div>
         <div class="summary-row">
           <span class="summary-icon">🚋</span>
-          <span>Tram 21 in <b>${routeOther.tram ? routeOther.tram.minutesAway : '?'} min</b>${routeOther.waitAtStop > 1 ? ` · ${routeOther.waitAtStop} min wait at stop` : ' · straight on'}</span>
+          <span>Tram 21 in <b>${routeOther.tram ? routeOther.tram.minutesAway : '?'} min</b>${routeOther.waitAtStop > 1 ? ` · ${routeOther.waitAtStop} min wait` : ' · straight on'}</span>
         </div>
         <div class="summary-row home-row">
           <span class="summary-icon">🏠</span>
           <span>Home by <b>${routeOther.homeTime || '?'}</b></span>
         </div>
-      </div>
+      </div>` : `
+      <div class="loser-summary">
+        ${routeOther.trainLine} in ${routeOther.trainIn} min → Ostkreuz · Tram in ${routeOther.tram ? routeOther.tram.minutesAway : '?'} min · home ${routeOther.homeTime || '?'}
+      </div>`}
     </div>`;
   }
 
