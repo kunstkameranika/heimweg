@@ -14,6 +14,7 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useJob } from "@/hooks/use-job";
 import type { AgentCandidateView, AgentView } from "@/lib/agent/view";
 import { AGENT_MAX_SOURCE_REQUESTS_PER_DAY } from "@/lib/agent/limits";
+import { SOURCE_MONTHLY_LIMITS } from "@/lib/job-search/usage-limits";
 
 import { approveAgentDraft, dismissAgentCandidate, prepareAgentDraft, restoreAgentCandidate, runAgentNow } from "./actions";
 
@@ -121,6 +122,7 @@ export function AgentScreen({ view }: { view: AgentView }) {
             </Fact>
             <Fact label="Next run">{view.nextRun ?? "Off"}</Fact>
             <Fact label="Source requests available">{Math.max(0, AGENT_MAX_SOURCE_REQUESTS_PER_DAY - view.sourceRequestsUsed)} of {AGENT_MAX_SOURCE_REQUESTS_PER_DAY} in the rolling 24-hour budget</Fact>
+            <Fact label="JSearch, last 30 days">{view.jsearchUsed} of {SOURCE_MONTHLY_LIMITS.JSEARCH.plan} searches. The agent stops at {SOURCE_MONTHLY_LIMITS.JSEARCH.agent}, leaving the rest for Find jobs.</Fact>
             <Fact label="Whole-batch quota eligibility">{view.nextEligibility} ({view.timeZone})</Fact>
           </dl>
           {running && (
@@ -155,7 +157,7 @@ export function AgentScreen({ view }: { view: AgentView }) {
             </li>)}</ul>
           </div>}
           <p className="text-meta text-muted">Found counts may overlap between searches; do not add them up as unique postings. New to agent is counted at each search, before the shared batch is deduplicated and scored. Candidates retain the search names used when found, even after renaming or deletion.</p>
-          <p className="text-meta text-muted">One first-page source request per enabled search, sequentially. The shared limit is {AGENT_MAX_SOURCE_REQUESTS_PER_DAY} requests in a rolling 24 hours, including failed attempts. All-run waits until the whole batch fits; manual runs also wait at least an hour after the previous run. Each run shares a limit of {view.maxScores} AI scores{view.autoDraft ? ` and ${view.maxDrafts} automatic drafts` : "; automatic drafts are off"} across all searches.</p>
+          <p className="text-meta text-muted">One first-page source request per enabled search, sequentially, each on its own source. A search whose source has used its monthly budget is skipped with a reason. The shared limit is {AGENT_MAX_SOURCE_REQUESTS_PER_DAY} requests in a rolling 24 hours, including failed attempts. All-run waits until the whole batch fits; manual runs also wait at least an hour after the previous run. Each run shares a limit of {view.maxScores} AI scores{view.autoDraft ? ` and ${view.maxDrafts} automatic drafts` : "; automatic drafts are off"} across all searches.</p>
         </Card>
 
         <Section title="Drafts to review" count={drafts.length}>

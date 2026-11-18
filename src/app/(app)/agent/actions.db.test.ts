@@ -8,6 +8,9 @@ import { createTestClient, resetDatabase } from "@/test/db";
 
 import { approveAgentDraft, dismissAgentCandidate, prepareAgentDraft, restoreAgentCandidate, runAgentNow, saveAgentSettings, saveRecurringSearch, deleteRecurringSearch, moveRecurringSearch, setRecurringSearchEnabled } from "./actions";
 
+// Written for the original three-search, three-request limits; the logic is the same at ten.
+vi.mock("@/lib/agent/limits", () => ({ MAX_AGENT_SEARCHES: 3, AGENT_MAX_SOURCE_REQUESTS_PER_DAY: 3, MAX_AGENT_SEARCHES_TEXT: "Keep at most three Agent searches." }));
+
 const db = vi.hoisted(() => ({ client: undefined as ReturnType<typeof createTestClient> | undefined }));
 vi.mock("@/lib/prisma", async () => {
   const { createTestClient } = await import("@/test/db");
@@ -71,7 +74,7 @@ describe("Run now (E16-4)", () => {
     expect(await runAgentNow({})).toMatchObject({ ok: false, error: "Choose an AI provider in Settings → AI provider first." });
     setup.ai = true;
     setup.source = null;
-    expect(await runAgentNow({})).toMatchObject({ ok: false, error: "Choose a job source in Settings → Job search first." });
+    expect(await runAgentNow({})).toMatchObject({ ok: false, error: expect.stringContaining("or a job source in Settings → Job search.") });
   });
 
   it("waits an hour after the previous run, and keeps to 3 a day", async () => {

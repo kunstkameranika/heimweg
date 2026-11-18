@@ -16,6 +16,10 @@ import { runAgentScan } from "./run";
 import { saveAgentSearch, listAgentSearches } from "./searches";
 import { reserveRun } from "./runs";
 
+// These tests were written for the original three-search, three-request limits;
+// the logic is the same at ten (see limits.test.ts).
+vi.mock("./limits", () => ({ MAX_AGENT_SEARCHES: 3, AGENT_MAX_SOURCE_REQUESTS_PER_DAY: 3, MAX_AGENT_SEARCHES_TEXT: "Keep at most three Agent searches." }));
+
 const db = vi.hoisted(() => ({ client: undefined as ReturnType<typeof createTestClient> | undefined }));
 vi.mock("@/lib/prisma", async () => {
   const { createTestClient } = await import("@/test/db");
@@ -362,10 +366,10 @@ describe("runAgentScan (E16-3)", () => {
     expect(await stop()).toBe("Choose an AI provider in Settings → AI provider first.");
     fake.ai = true;
     fake.source = null;
-    expect(await stop()).toBe("Choose a job source in Settings → Job search first.");
+    expect(await stop()).toBe("Choose a source for “My search”, or a job source in Settings → Job search.");
     // It never searches the Bundesagentur für Arbeit on its own (#223).
     fake.source = "ARBEITSAGENTUR";
-    expect(await stop()).toBe("The job agent doesn't search the Bundesagentur für Arbeit. Choose JSearch, Adzuna or FreeHire in Settings → Job search for it.");
+    expect(await stop()).toBe("The job agent doesn't search the Bundesagentur für Arbeit. Choose JSearch, Adzuna or FreeHire for “My search”, or in Settings → Job search.");
     fake.source = "JSEARCH";
     expect(fake.searches).toBe(0);
     expect((await loadSettings()).agentRuns).toEqual([]);
@@ -437,5 +441,46 @@ describe("runAgentScan (E16-3)", () => {
     fake.postings = [page[2]];
     expect((await runAgentScan({ manual: false }, context(), now)).message).toBe("Scored 1 new posting; none reached your minimum score of 70.");
     expect(demoProfile().basics.name).toBe("Jane Doe");
+  });
+});
+
+describe("runAgentScan with a source per search", () => {
+  it("asks each search's own source, and Settings' source for the rest", async () => {
+    const { searchPostings } = await import("@/lib/job-search");
+    vi.mocked(searchPostings).mockClear();
+    await prisma().agentSearch.create({ data: { name: "On Adzuna", source: "ADZUNA", query, sort: 1 } });
+    await runAgentScan({ manual: false }, context(), now);
+    expect(vi.mocked(searchPostings).mock.calls.map(([source]) => source)).toEqual(["JSEARCH", "ADZUNA"]);
+    expect((await loadSettings()).agentRuns[0].sourceRequests).toBe(2);
+  });
+
+  it("skips a JSearch search once the agent's 30-day budget is used, and still runs the others", async () => {
+    const { searchPostings } = await import("@/lib/job-search");
+    vi.mocked(searchPostings).mockClear();
+    const used = Array.from({ length: 220 }, (_, i) => ({ source: "JSEARCH", at: new Date(now.getTime() - (i + 1) * hour).toISOString() }));
+    await prisma().setting.create({ data: { key: "sourceUsage", value: JSON.stringify(used) } });
+    await prisma().agentSearch.create({ data: { name: "On FreeHire", source: "FREEHIRE", query, sort: 1 } });
+    const result = await runAgentScan({ manual: false }, context(), now);
+    expect(vi.mocked(searchPostings).mock.calls.map(([source]) => source)).toEqual(["FREEHIRE"]);
+    const [run] = (await loadSettings()).agentRuns;
+    expect(run.sourceRequests).toBe(1);
+    expect(run.searches?.[0]).toMatchObject({ searchName: "My search", found: 0, error: expect.stringContaining("220 JSearch searches") });
+    expect(result.message).toContain("My search: The agent has used its 220 JSearch searches");
+  });
+
+  it("counts the agent's JSearch requests toward the 30-day usage", async () => {
+    const { sourceUsage } = await import("@/lib/job-search/usage");
+    await runAgentScan({ manual: false }, context(), now);
+    const later = new Date(now.getTime() + hour);
+    expect(await sourceUsage("JSEARCH", later)).toHaveLength(1);
+    expect(await sourceUsage("FREEHIRE", later)).toHaveLength(0);
+  });
+
+  it("stops without spending a slot when every search is over budget", async () => {
+    const used = Array.from({ length: 220 }, (_, i) => ({ source: "JSEARCH", at: new Date(now.getTime() - (i + 1) * hour).toISOString() }));
+    await prisma().setting.create({ data: { key: "sourceUsage", value: JSON.stringify(used) } });
+    const result = await runAgentScan({ manual: false }, context(), now);
+    expect(result.message).toContain("frees up");
+    expect((await loadSettings()).agentRuns).toHaveLength(0);
   });
 });

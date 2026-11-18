@@ -10,6 +10,7 @@ import { Select } from "@/components/ui/select";
 import { Toggle } from "@/components/ui/toggle";
 import type { SavedAgentSearch } from "@/lib/agent/search";
 import { AGENT_MAX_SOURCE_REQUESTS_PER_DAY } from "@/lib/agent/limits";
+import { SOURCE_MONTHLY_LIMITS } from "@/lib/job-search/usage-limits";
 import type { Country } from "@/lib/job-search/countries";
 import type { JobSource, SearchQuery } from "@/lib/job-search/search";
 import type { Scorer } from "@/lib/scoring/scorers";
@@ -71,6 +72,8 @@ export function AgentSection({
       if (!toastResult(result).ok) setSettings(previous);
     });
   };
+  // With none saved yet, a new search starts on Settings' source too.
+  const usesDefault = searches.length === 0 || searches.some((search) => search.enabled && !search.source);
 
   return (
     <>
@@ -78,7 +81,8 @@ export function AgentSection({
         Once a day it runs all enabled searches, scores the new postings against your profile, and keeps the best on the Agent screen. It never sends or applies.
       </SettingsSectionIntro>
 
-      {source === "ARBEITSAGENTUR" ? (
+      {/* Only searches without a source of their own use Settings' one. */}
+      {usesDefault && source === "ARBEITSAGENTUR" ? (
         // It searches on its own, which the BA's terms forbid most clearly (#223).
         <p role="note" className="rounded-card bg-warning-surface px-4 py-3 text-meta text-warning">
           The agent doesn&apos;t search the Bundesagentur für Arbeit. Choose JSearch, Adzuna or FreeHire in{" "}
@@ -87,8 +91,8 @@ export function AgentSection({
           </Link>{" "}
           for it. Manual Find jobs searches are unaffected.
         </p>
-      ) : !source ? (
-        <SetupNote before="The agent searches the source you choose in " section="jobs" after=", which is off. Choose one first." />
+      ) : usesDefault && !source ? (
+        <SetupNote before="Searches without a source of their own use the one in " section="jobs" after=", which is off. Choose one there, or a source for each search." />
       ) : scoring.ready ? null : scoring.scorer === "JEV" ? (
         <SetupNote before="The agent scores postings with Jev, which needs your TypeSafe key in " section="scoring" after="." />
       ) : (
@@ -166,7 +170,7 @@ export function AgentSection({
       </Card>
 
       <p className="text-meta text-muted">
-        One shared daily schedule for all enabled searches, in {timeZone}. Each search requests only the first page, sequentially. At most {AGENT_MAX_SOURCE_REQUESTS_PER_DAY} source requests in any rolling 24 hours, including failed attempts. A run waits until the whole batch fits. Across all searches, each run scores up to {plural(settings.maxScores, "posting", "postings")}
+        One shared daily schedule for all enabled searches, in {timeZone}. Each search requests only the first page, sequentially, on its own source. JSearch searches stop at {SOURCE_MONTHLY_LIMITS.JSEARCH.agent} in any 30 days. At most {AGENT_MAX_SOURCE_REQUESTS_PER_DAY} source requests in any rolling 24 hours, including failed attempts. A run waits until the whole batch fits. Across all searches, each run scores up to {plural(settings.maxScores, "posting", "postings")}
         {settings.autoDraft ? ` and prepares up to ${plural(settings.maxDrafts, "draft", "drafts")}` : ""}. Scoring uses the provider in Settings → Scoring; drafts use your AI provider. Both receive your profile; the job source only gets the search.
       </p>
     </>

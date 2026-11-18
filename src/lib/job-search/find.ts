@@ -2,6 +2,7 @@ import "server-only";
 
 import { credentialsFor, loadJobSearchConfig, requestContext } from "./config";
 import { JobSearchError } from "./errors";
+import { recordSourceUse } from "./usage";
 import { postingDetails, searchPostings } from "./index";
 import type { FoundPosting, JobSource, SearchPage, SearchProblem, SearchQuery } from "./search";
 
@@ -22,6 +23,7 @@ export async function askSource(
   if (!from) return { ok: false, problem: "off", message: "Choose where to search in Settings → Job search first." };
   if (!query.country) return { ok: false, problem: "no-country", message: "Choose a country to search in." };
   try {
+    await recordSourceUse(from);
     const page = await searchPostings(from, credentialsFor(config, from), query, next, requestContext(from));
     return { ok: true, source: from, ...page };
   } catch (error) {

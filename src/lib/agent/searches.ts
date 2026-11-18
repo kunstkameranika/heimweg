@@ -6,7 +6,16 @@ import { searchQuerySchema } from "@/lib/job-search/search";
 import { lockForTransaction } from "@/lib/db-lock";
 import { prisma } from "@/lib/prisma";
 
-import { agentSearchInputSchema, MAX_AGENT_SEARCHES, type AgentSearchInput, type SavedAgentSearch } from "./search";
+import { AGENT_SOURCES, agentSearchInputSchema, MAX_AGENT_SEARCHES, MAX_AGENT_SEARCHES_TEXT, type AgentSearchInput, type AgentSource, type SavedAgentSearch } from "./search";
+
+type AgentSearchRow = Prisma.AgentSearchGetPayload<object>;
+
+/** A stored row as the app uses it; a source the agent can't use reads as the default. */
+const saved = (row: AgentSearchRow): SavedAgentSearch => ({
+  ...row,
+  source: (AGENT_SOURCES as readonly string[]).includes(row.source ?? "") ? row.source as AgentSource : null,
+  query: searchQuerySchema.parse(row.query),
+});
 
 /** Serialize all search writes, including imports, without introducing a lock table. */
 export async function lockAgentSearches(tx: Prisma.TransactionClient): Promise<void> {
@@ -15,7 +24,7 @@ export async function lockAgentSearches(tx: Prisma.TransactionClient): Promise<v
 
 export async function listAgentSearches(db: PrismaClient = prisma): Promise<SavedAgentSearch[]> {
   const rows = await db.agentSearch.findMany({ orderBy: [{ sort: "asc" }, { createdAt: "asc" }, { id: "asc" }] });
-  return rows.map((row) => ({ ...row, query: searchQuerySchema.parse(row.query) }));
+  return rows.map(saved);
 }
 
 /** Create, or update by stable id. Disabled searches count toward the cap too. */
@@ -24,11 +33,11 @@ export async function saveAgentSearch(input: AgentSearchInput, id?: string, db: 
   return db.$transaction(async (tx) => {
     await lockAgentSearches(tx);
     if (id && !await tx.agentSearch.findUnique({ where: { id }, select: { id: true } })) throw new ActionError("That Agent search no longer exists.");
-    if (!id && await tx.agentSearch.count() >= MAX_AGENT_SEARCHES) throw new ActionError("Keep at most three Agent searches.");
+    if (!id && await tx.agentSearch.count() >= MAX_AGENT_SEARCHES) throw new ActionError(MAX_AGENT_SEARCHES_TEXT);
     const row = id
       ? await tx.agentSearch.update({ where: { id }, data })
       : await tx.agentSearch.create({ data });
-    return { ...row, query: searchQuerySchema.parse(row.query) };
+    return saved(row);
   });
 }
 
@@ -40,8 +49,7 @@ export async function setAgentSearchEnabled(id: string, enabled: boolean, db: Pr
     if (!current) throw new ActionError("That Agent search no longer exists.");
     const query = searchQuerySchema.parse(current.query);
     if (enabled && !query.country) throw new ActionError(`Choose a country for “${current.name}”.`);
-    const row = await tx.agentSearch.update({ where: { id }, data: { enabled } });
-    return { ...row, query };
+    return saved(await tx.agentSearch.update({ where: { id }, data: { enabled } }));
   });
 }
 

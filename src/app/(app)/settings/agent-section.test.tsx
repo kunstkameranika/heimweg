@@ -8,6 +8,8 @@ import type { SavedAgentSearch } from "@/lib/agent/search";
 import { deleteRecurringSearch, moveRecurringSearch, saveAgentSettings, saveRecurringSearch, setRecurringSearchEnabled } from "../agent/actions";
 import { AgentSection, type AgentSettings } from "./agent-section";
 
+// Written for the original three-search limit; the logic is the same at ten.
+vi.mock("@/lib/agent/limits", () => ({ MAX_AGENT_SEARCHES: 3, AGENT_MAX_SOURCE_REQUESTS_PER_DAY: 3, MAX_AGENT_SEARCHES_TEXT: "Keep at most three Agent searches." }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
 vi.mock("../agent/actions", () => ({
   saveAgentSettings: vi.fn(async () => ({ ok: true, data: null })),
@@ -16,7 +18,7 @@ vi.mock("../agent/actions", () => ({
 vi.mock("@/components/toast", () => ({ toast: vi.fn(), toastResult: (result: { ok: boolean; error?: string }) => (result.ok ? result : (toast(result.error!), result)) }));
 
 const initial: AgentSettings = { enabled: false, hour: 7, minScore: 70, maxScores: 15, maxDrafts: 3, autoDraft: false };
-const search: SavedAgentSearch = { id: "one", name: "Data roles", query: { keywords: "Data scientist", place: "Berlin", country: "de", radiusKm: 25, remoteOnly: false, postedWithin: "any" }, enabled: true, sort: 0, createdAt: new Date(), updatedAt: new Date() };
+const search: SavedAgentSearch = { id: "one", name: "Data roles", source: null, query: { keywords: "Data scientist", place: "Berlin", country: "de", radiusKm: 25, remoteOnly: false, postedWithin: "any" }, enabled: true, sort: 0, createdAt: new Date(), updatedAt: new Date() };
 const countries = [{ code: "de", name: "Germany" }, { code: "nl", name: "Netherlands" }];
 const open = (props: Partial<Parameters<typeof AgentSection>[0]> = {}) => render(<AgentSection initial={initial} searches={[search]} source="JSEARCH" scoring={{ scorer: "AI", ready: true }} countries={countries} timeZone="Europe/Berlin" {...props} />);
 
@@ -81,9 +83,11 @@ describe("Settings → Job agent", () => {
     expect(screen.getByRole("alert")).toHaveTextContent("Give the search a name.");
     expect(saveRecurringSearch).not.toHaveBeenCalled();
     await user.type(screen.getByLabelText("Search name"), "Data roles");
-    vi.mocked(saveRecurringSearch).mockResolvedValueOnce({ ok: true, data: search });
+    await user.selectOptions(screen.getByLabelText("Source"), "Adzuna");
+    vi.mocked(saveRecurringSearch).mockResolvedValueOnce({ ok: true, data: { ...search, source: "ADZUNA" } });
     await user.click(screen.getByRole("button", { name: "Save search" }));
-    expect(saveRecurringSearch).toHaveBeenCalledWith({ id: undefined, name: "Data roles", query: search.query, enabled: true, sort: 0 });
+    expect(saveRecurringSearch).toHaveBeenCalledWith({ id: undefined, name: "Data roles", source: "ADZUNA", query: search.query, enabled: true, sort: 0 });
+    expect(await screen.findByText(/· Adzuna$/)).toBeInTheDocument();
     expect(await screen.findByRole("switch", { name: "Data roles" })).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Edit Data roles" }));
     await user.clear(screen.getByLabelText("Search name"));
@@ -110,9 +114,13 @@ describe("Settings → Job agent", () => {
 
   it("points to the source or AI provider while one isn't set up", () => {
     const { unmount } = open({ source: null });
-    expect(screen.getByRole("note")).toHaveTextContent("The agent searches the source you choose in Settings → Job search, which is off. Choose one first.");
+    expect(screen.getByRole("note")).toHaveTextContent("Searches without a source of their own use the one in Settings → Job search, which is off. Choose one there, or a source for each search.");
     expect(screen.getByRole("link", { name: "Settings → Job search" })).toHaveAttribute("href", "/settings?section=jobs");
     unmount();
+    // Every enabled search has its own source: nothing to point at.
+    const ownSource = open({ source: null, searches: [{ ...search, source: "FREEHIRE" }] });
+    expect(screen.queryByRole("note")).not.toBeInTheDocument();
+    ownSource.unmount();
     open({ scoring: { scorer: "AI", ready: false } });
     expect(screen.getByRole("note")).toHaveTextContent("The agent scores postings with the AI provider in Settings → AI provider, which isn't set up yet. Choose one first.");
     expect(screen.getByRole("link", { name: "Settings → AI provider" })).toHaveAttribute("href", "/settings?section=ai");

@@ -13,6 +13,10 @@ import { attributeAgentCandidates } from "./attribution";
 import { candidateData } from "./candidates";
 import { deleteAgentSearch, listAgentSearches, lockAgentSearches, saveAgentSearch, setAgentSearchEnabled } from "./searches";
 
+// These tests were written for the original three-search, three-request limits;
+// the logic is the same at ten (see limits.test.ts).
+vi.mock("./limits", () => ({ MAX_AGENT_SEARCHES: 3, AGENT_MAX_SOURCE_REQUESTS_PER_DAY: 3, MAX_AGENT_SEARCHES_TEXT: "Keep at most three Agent searches." }));
+
 vi.mock("@/lib/env", () => ({ env: { DOSSIER_SECRET: "s".repeat(32) } }));
 vi.mock("@/lib/prisma", () => ({ prisma: new Proxy({}, { get: (_, key) => Reflect.get(client, key) }) }));
 const client = createTestClient();

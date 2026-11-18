@@ -721,6 +721,8 @@ model ClaudePaste {
 model AgentSearch {
   id         String                 @id @default(cuid())
   name       String
+  /// Null: the source chosen in Settings → Job search.
+  source     PostingSource?
   query      Json
   enabled    Boolean                @default(true)
   sort       Int                    @default(0)

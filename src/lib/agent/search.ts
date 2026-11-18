@@ -1,17 +1,28 @@
 import { z } from "zod";
 
-import { EMPTY_QUERY, searchQuerySchema, type SearchQuery } from "@/lib/job-search/search";
+import { PostingSource } from "@/generated/prisma/enums";
+import { EMPTY_QUERY, searchQuerySchema, type JobSource, type SearchQuery } from "@/lib/job-search/search";
 
 /** Fixed product and source-budget cap, shared by forms and server writes. */
-export { MAX_AGENT_SEARCHES } from "./limits";
+export { MAX_AGENT_SEARCHES, MAX_AGENT_SEARCHES_TEXT } from "./limits";
+
+/** The sources a search may name; the agent never searches the Bundesagentur (#223). */
+export const AGENT_SOURCES = [PostingSource.JSEARCH, PostingSource.ADZUNA, PostingSource.FREEHIRE] as const;
+export type AgentSource = (typeof AGENT_SOURCES)[number];
+
 export const agentSearchInputSchema = z.object({
   name: z.string().trim().min(1, "Give the search a name.").max(100),
+  /** Null: the source chosen in Settings → Job search. */
+  source: z.enum(AGENT_SOURCES).nullable().default(null),
   query: searchQuerySchema.refine((query) => Boolean(query.keywords), "Add what to look for."),
   enabled: z.boolean().default(true),
   sort: z.number().int().min(0).default(0),
 });
 export type AgentSearchInput = z.input<typeof agentSearchInputSchema>;
-export type SavedAgentSearch = { id: string; name: string; query: SearchQuery; enabled: boolean; sort: number; createdAt: Date; updatedAt: Date };
+export type SavedAgentSearch = { id: string; name: string; source: AgentSource | null; query: SearchQuery; enabled: boolean; sort: number; createdAt: Date; updatedAt: Date };
+
+/** The source `search` runs on: its own, or the one chosen in Settings. */
+export const sourceOf = (search: Pick<SavedAgentSearch, "source">, fallback: JobSource | null): JobSource | null => search.source ?? fallback;
 
 /** Shared setup wording for the engine and the master enable action. */
 export function agentSearchSetupProblem(searches: readonly SavedAgentSearch[]): string | null {

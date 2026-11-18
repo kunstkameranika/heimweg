@@ -10,8 +10,10 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Input } from "@/components/ui/input";
+import { Select } from "@/components/ui/select";
 import { Toggle } from "@/components/ui/toggle";
-import { agentSearchInputSchema, MAX_AGENT_SEARCHES, type SavedAgentSearch } from "@/lib/agent/search";
+import { AGENT_SOURCES, agentSearchInputSchema, MAX_AGENT_SEARCHES, sourceOf, type AgentSource, type SavedAgentSearch } from "@/lib/agent/search";
+import { SOURCE_INFO } from "@/lib/job-search/sources";
 import type { Country } from "@/lib/job-search/countries";
 import { EMPTY_QUERY, searchHref, type JobSource, type SearchQuery } from "@/lib/job-search/search";
 
@@ -62,7 +64,7 @@ export function RecurringSearches({ initial, suggestedQuery, source, countries }
     <div>
       <h3 className="text-field font-medium">Recurring searches ({searches.length}/{MAX_AGENT_SEARCHES})</h3>
       <p className="text-meta text-muted">
-        Up to {MAX_AGENT_SEARCHES} named searches, including disabled ones. Enabled searches run in this order through the shared source in Settings → Job search.
+        Up to {MAX_AGENT_SEARCHES} named searches, including disabled ones. Enabled searches run in this order, each on its own source or the one chosen in Settings → Job search.
         Saved, dismissed and applied-for postings stay out of the review queue.
       </p>
     </div>
@@ -82,6 +84,7 @@ export function RecurringSearches({ initial, suggestedQuery, source, countries }
           </Link>
           <p className="text-meta text-muted break-words">
             {search.query.keywords}{search.query.place ? ` · ${search.query.place}` : ""} · {search.query.country.toUpperCase() || "Choose a country"}
+            {" · "}{sourceLabel(search.source, source)}
           </p>
           <div className="flex flex-wrap gap-2">
             <Button variant="secondary" size="sm" aria-label={`Edit ${controlName(search, index)}`} disabled={pending || editing !== null} onClick={() => setEditing(search)}>
@@ -160,12 +163,14 @@ function SearchEditor({ search, suggestedQuery, sort, source, countries, onCance
   const [name, setName] = useState(search?.name ?? "");
   const [query, setQuery] = useState(search?.query ?? suggestedQuery ?? EMPTY_QUERY);
   const [enabled, setEnabled] = useState(search?.enabled ?? true);
+  const [searchSource, setSearchSource] = useState<AgentSource | null>(search?.source ?? null);
+  const effective = sourceOf({ source: searchSource }, source);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const patch = (change: Partial<SearchQuery>) => setQuery((current) => ({ ...current, ...change }));
   return <form aria-label={search ? `Edit ${search.name}` : "New recurring search"} className="flex flex-col gap-4 border-t border-line pt-4" onSubmit={(event) => {
     event.preventDefault();
-    const input = { name, query, enabled, sort: search?.sort ?? sort };
+    const input = { name, source: searchSource, query, enabled, sort: search?.sort ?? sort };
     const parsed = agentSearchInputSchema.safeParse(input);
     if (!parsed.success) {
       setError(parsed.error.issues[0].message);
@@ -185,10 +190,19 @@ function SearchEditor({ search, suggestedQuery, sort, source, countries, onCance
     <fieldset disabled={pending} className="flex min-w-0 flex-col gap-4">
       <legend className="mb-3 text-field font-medium">{search ? "Edit search" : "Add recurring search"}</legend>
        <Input label="Search name" value={name} maxLength={100} autoFocus onChange={(event) => setName(event.target.value)} />
+       <Select
+         label="Source"
+         hint="Each source needs its key in Settings → Job search."
+         value={searchSource ?? ""}
+         onChange={(event) => setSearchSource((event.target.value || null) as AgentSource | null)}
+       >
+         <option value="">{sourceLabel(null, source)}</option>
+         {AGENT_SOURCES.map((option) => <option key={option} value={option}>{SOURCE_INFO[option].name}</option>)}
+       </Select>
        <div className="grid grid-cols-1 items-start gap-4 sm:grid-cols-2">
-         <SearchFields value={query} onChange={patch} source={source} countries={countries} />
+         <SearchFields value={query} onChange={patch} source={effective} countries={countries} />
        </div>
-      <RemoteOnlyField value={query} onChange={patch} source={source} />
+      <RemoteOnlyField value={query} onChange={patch} source={effective} />
       <Toggle label="Enable this search" checked={enabled} onCheckedChange={setEnabled} />
        {error && <p role="alert" className="text-meta text-error">{error}</p>}
        <div className="flex flex-wrap gap-2">
@@ -197,4 +211,10 @@ function SearchEditor({ search, suggestedQuery, sort, source, countries, onCance
        </div>
     </fieldset>
   </form>;
+}
+
+/** How a search's source reads: its own, or Settings' default by name. */
+function sourceLabel(own: AgentSource | null, fallback: JobSource | null): string {
+  if (own) return SOURCE_INFO[own].name;
+  return fallback ? `Settings’ source (${SOURCE_INFO[fallback].name})` : "Settings’ source (none chosen)";
 }

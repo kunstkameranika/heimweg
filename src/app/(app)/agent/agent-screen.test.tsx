@@ -40,6 +40,7 @@ const card = (id: string, score: number, extra: Partial<AgentCandidateView> = {}
 const view: AgentView = {
   searches: [],
   sourceRequestsUsed: 0,
+  jsearchUsed: 0,
   nextEligibility: "Wed 21 Oct, 07:00",
   timeZone: "Europe/Berlin",
   searchHistory: [],
@@ -65,7 +66,7 @@ beforeEach(() => vi.clearAllMocks());
 
 describe("AgentScreen (E16-6)", () => {
   it.each([null, "The agent scan was interrupted. Try again."])("does not present a collected source page as overall success for batch outcome %s", (batchMessage) => {
-    const search = { id: "one", name: "Incomplete", query: { keywords: "Designer", place: "", country: "", radiusKm: 25 as const, remoteOnly: false, postedWithin: "any" as const }, enabled: false, sort: 0, createdAt: new Date(), updatedAt: new Date() };
+    const search = { id: "one", name: "Incomplete", source: null, query: { keywords: "Designer", place: "", country: "", radiusKm: 25 as const, remoteOnly: false, postedWithin: "any" as const }, enabled: false, sort: 0, createdAt: new Date(), updatedAt: new Date() };
     open({ searches: [search], searchHistory: [{ searchId: "one", searchName: search.name, found: 3, fresh: 0, error: null, at: "Tue 20 Oct, 07:00", batchMessage }] });
     expect(screen.getByText("Designer · No country selected")).toBeInTheDocument();
     expect(screen.getByText(/Last source request completed:/)).toBeInTheDocument();
@@ -74,10 +75,10 @@ describe("AgentScreen (E16-6)", () => {
   });
 
   it("shows quota, per-search results and historical attribution without changing review actions", () => {
-    const search = { id: "one", name: "Renamed", query: { keywords: "Designer", place: "Berlin", country: "de", radiusKm: 25 as const, remoteOnly: false, postedWithin: "any" as const }, enabled: true, sort: 0, createdAt: new Date(), updatedAt: new Date() };
+    const search = { id: "one", name: "Renamed", source: null, query: { keywords: "Designer", place: "Berlin", country: "de", radiusKm: 25 as const, remoteOnly: false, postedWithin: "any" as const }, enabled: true, sort: 0, createdAt: new Date(), updatedAt: new Date() };
     const result = { searchId: "one", searchName: "Original", found: 10, fresh: 4, error: "Source failed" };
     open({ searches: [search], sourceRequestsUsed: 2, limitReached: true, searchHistory: [{ ...result, at: "Tue 20 Oct, 07:00", batchMessage: "Interrupted" }], searchResults: [result, { ...result, searchId: "gone", searchName: "Removed", error: null }], scored: [card("s1", 84, { searches: [{ searchId: "one", searchName: "Original" }, { searchId: null, searchName: "Removed" }] })] });
-    expect(screen.getByText("Source requests available").nextElementSibling).toHaveTextContent("1 of 3");
+    expect(screen.getByText("Source requests available").nextElementSibling).toHaveTextContent("8 of 10");
     expect(screen.getByText("Whole-batch quota eligibility").nextElementSibling).toHaveTextContent("Wed 21 Oct, 07:00 (Europe/Berlin)");
     expect(screen.getByText("Renamed · Enabled")).toBeInTheDocument();
     expect(screen.getByText(/Last source request failed:/)).toHaveTextContent("10 found · 4 new to agent");

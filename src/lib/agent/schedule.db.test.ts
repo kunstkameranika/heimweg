@@ -8,6 +8,10 @@ import { createTestClient, resetDatabase } from "@/test/db";
 import { nextAgentRun, resetInterruptedDrafts, scheduledRunDue, startDueRun } from "./schedule";
 import { runLimitProblem } from "./runs";
 
+// These tests were written for the original three-search, three-request limits;
+// the logic is the same at ten (see limits.test.ts).
+vi.mock("./limits", () => ({ MAX_AGENT_SEARCHES: 3, AGENT_MAX_SOURCE_REQUESTS_PER_DAY: 3, MAX_AGENT_SEARCHES_TEXT: "Keep at most three Agent searches." }));
+
 const db = vi.hoisted(() => ({ client: undefined as ReturnType<typeof createTestClient> | undefined }));
 vi.mock("@/lib/prisma", async () => {
   const { createTestClient } = await import("@/test/db");

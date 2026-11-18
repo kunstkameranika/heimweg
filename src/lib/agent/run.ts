@@ -9,7 +9,8 @@ import { dayOf } from "@/lib/calendar-view";
 import { searchPostings } from "@/lib/job-search";
 import { credentialsFor, loadJobSearchConfig, requestContext, type JobSearchConfig } from "@/lib/job-search/config";
 import { JobSearchError } from "@/lib/job-search/errors";
-import { postingKey, type FoundPosting } from "@/lib/job-search/search";
+import { postingKey, type FoundPosting, type JobSource } from "@/lib/job-search/search";
+import { agentBudgetProblem, recordSourceUse } from "@/lib/job-search/usage";
 import { startJob, type JobContext } from "@/lib/jobs/runner";
 import { logServerError } from "@/lib/log";
 import { saveScore } from "@/lib/posting-scores";
@@ -27,7 +28,7 @@ import { agentDraftJob, draftJobKey } from "./draft";
 import { reconcileInterruptedRuns, recordRunEnd, recordSourceRequest, reserveRun } from "./runs";
 import { listAgentSearches } from "./searches";
 import { withAgentScanLock } from "./scan-lock";
-import { agentSearchSetupProblem, type SavedAgentSearch } from "./search";
+import { agentSearchSetupProblem, sourceOf, type SavedAgentSearch } from "./search";
 
 // One run: collect every enabled recurring search, then fairly evaluate
 // new postings under shared score/draft limits. It never sends anything.
@@ -61,14 +62,17 @@ async function setupProblemFor(searches: readonly SavedAgentSearch[], config: Jo
   // Scoring is what a run does; drafts ask the AI provider when there are any.
   const scoring = await scoringProblem();
   if (scoring) return scoring;
-  if (!config.source) return "Choose a job source in Settings → Job search first.";
-  // It searches on its own, which the BA's terms forbid most clearly (#223).
-  if (config.source === "ARBEITSAGENTUR") return "The job agent doesn't search the Bundesagentur für Arbeit. Choose JSearch, Adzuna or FreeHire in Settings → Job search for it.";
-  try {
-    credentialsFor(config, config.source);
-  } catch (error) {
-    if (error instanceof JobSearchError) return error.message;
-    throw error;
+  for (const search of searches.filter((search) => search.enabled)) {
+    const source = sourceOf(search, config.source);
+    if (!source) return `Choose a source for “${search.name}”, or a job source in Settings → Job search.`;
+    // It searches on its own, which the BA's terms forbid most clearly (#223).
+    if (source === "ARBEITSAGENTUR") return `The job agent doesn't search the Bundesagentur für Arbeit. Choose JSearch, Adzuna or FreeHire for “${search.name}”, or in Settings → Job search.`;
+    try {
+      credentialsFor(config, source);
+    } catch (error) {
+      if (error instanceof JobSearchError) return `${search.name}: ${error.message}`;
+      throw error;
+    }
   }
   return null;
 }
@@ -129,25 +133,43 @@ async function scan(manual: boolean, context: JobContext, now: Date, requestNow:
   const setup = await setupProblemFor(allSearches, config);
   if (setup) return stopped(setup);
   const searches = allSearches.filter((search) => search.enabled);
-  const source = config.source;
-  // Keep this explicit server-side guard before admission as well as setup.
-  if (!source || source === "ARBEITSAGENTUR") return stopped("Choose JSearch, Adzuna or FreeHire in Settings → Job search for the job agent.");
-  const credentials = credentialsFor(config, source);
-  const run = await reserveRun(now, manual, searches.length, await lastKnownTimeZone());
+  const timeZone = await lastKnownTimeZone();
+  // Each search on its own source. One whose source is out of its monthly
+  // budget is skipped with a reason, not sent; the others still run.
+  const plan: { search: SavedAgentSearch; source: JobSource; skip: string | null }[] = [];
+  for (const search of searches) {
+    const source = sourceOf(search, config.source);
+    // Keep this explicit server-side guard before admission as well as setup.
+    if (!source || source === "ARBEITSAGENTUR") return stopped("Choose JSearch, Adzuna or FreeHire in Settings → Job search for the job agent.");
+    const budgeted = plan.filter((entry) => entry.source === source && !entry.skip).length;
+    const problem = await agentBudgetProblem(source, now, timeZone, budgeted);
+    plan.push({ search, source, skip: problem });
+  }
+  const sending = plan.filter((entry) => !entry.skip);
+  if (!sending.length) return stopped(plan[0]?.skip ?? "No search could run.");
+  const run = await reserveRun(now, manual, sending.length, timeZone);
   if (typeof run === "string") return stopped(run);
   const results: AgentSearchRun[] = [];
   const pages: FoundPosting[][] = [];
+  let slot = 0;
   try {
-    for (const search of searches) {
+    for (const { search, source, skip } of plan) {
       if (context.signal.aborted) break;
+      if (skip) {
+        pages.push([]);
+        results.push({ searchId: search.id, searchName: search.name, found: 0, fresh: 0, error: skip });
+        await recordRunEnd(run, null, results);
+        continue;
+      }
       await context.step(searches.length === 1 ? "Searching for new postings" : `Searching ${search.name}`);
       if (context.signal.aborted) break;
-      await recordSourceRequest(run, results.length, requestNow());
+      await recordSourceRequest(run, slot++, requestNow());
+      await recordSourceUse(source, requestNow());
       let postings: FoundPosting[] = [];
       let errorMessage: string | null = null;
       try {
         // Sequential, first page only. Global credentials are never copied to searches.
-        postings = (await searchPostings(source, credentials, search.query, null, requestContext(source))).postings;
+        postings = (await searchPostings(source, credentialsFor(config, source), search.query, null, requestContext(source))).postings;
       } catch (error) {
         errorMessage = error instanceof JobSearchError ? error.message : "The job source couldn't be reached. Try again.";
         if (!(error instanceof JobSearchError)) logServerError("job agent search", error);
@@ -172,7 +194,7 @@ async function scan(manual: boolean, context: JobContext, now: Date, requestNow:
     if (!result.fresh && result.found) result.message = "No new postings this time.";
     // Pass two links newly created candidates to EVERY matching search,
     // including overlaps whose duplicate posting was never scored separately.
-    for (let i = 0; i < pages.length; i++) await attributeAgentCandidates(searches[i], pages[i]);
+    for (let i = 0; i < pages.length; i++) await attributeAgentCandidates(plan[i].search, pages[i]);
     const failures = results.filter((search) => search.error);
     if (failures.length) result.message += ` ${failures.map((search) => `${search.searchName}: ${search.error}`).join(" ")}`;
     await recordRunEnd(run, result.message, results);

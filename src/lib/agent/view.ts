@@ -12,6 +12,7 @@ import type { AgentSearchRun } from "@/lib/settings";
 import { stringsOf } from "./candidates";
 import { AGENT_JOB_KEY } from "./jobs";
 import { agentSetupProblem } from "./run";
+import { sourceUsage } from "@/lib/job-search/usage";
 import { interruptedRunMessage, nextSourceBudgetAt, sourceRequestsInPastDay } from "./runs";
 import { nextAgentRun } from "./schedule";
 import { listAgentSearches } from "./searches";
@@ -47,6 +48,8 @@ export type AgentView = {
   /** Recurring search collection, including disabled searches, in run order. */
   searches: SavedAgentSearch[];
   sourceRequestsUsed: number;
+  /** JSearch requests, by hand and by the agent, in the last 30 days. */
+  jsearchUsed: number;
   nextEligibility: string;
   timeZone: string;
   searchHistory: (AgentSearchRun & { at: string; batchMessage: string | null })[];
@@ -150,6 +153,7 @@ export async function loadAgentView(now = new Date()): Promise<AgentView> {
   return {
     searches,
     sourceRequestsUsed: sourceRequestsInPastDay(settings.agentRuns, now),
+    jsearchUsed: (await sourceUsage("JSEARCH", now)).length,
     nextEligibility: eligible > now ? formatDateTime(eligible, timeZone, now) : "Now",
     timeZone,
     searchHistory: searches.flatMap((search) => {

@@ -2,7 +2,7 @@ import "server-only";
 
 import { Prisma, type PrismaClient } from "@/generated/prisma/client";
 import { encryptApiKey } from "@/lib/ai/api-key";
-import { agentSearchInputSchema, legacyAgentQuery, MAX_AGENT_SEARCHES } from "@/lib/agent/search";
+import { agentSearchInputSchema, legacyAgentQuery, MAX_AGENT_SEARCHES, MAX_AGENT_SEARCHES_TEXT } from "@/lib/agent/search";
 import { lockAgentSearches } from "@/lib/agent/searches";
 import { ActionError } from "@/lib/action";
 import { EXPORT_FORMAT, EXPORT_SCHEMA_VERSION, EXPORT_SCHEMA_VERSIONS, exportSchema, INSTALL_SETTINGS, SECRET_SETTINGS, type DossierExport } from "@/lib/data-export";
@@ -93,9 +93,9 @@ export async function importExport(db: PrismaClient, data: DossierExport): Promi
   let agentSearches = data.agentSearches ?? [];
   if (data.schemaVersion <= 10 && agentSearches.length === 0) {
     const query = legacyAgentQuery(settings.find((setting) => setting.key === "agentQuery")?.value ?? "null");
-    if (query) agentSearches = [{ id: "agent-search-legacy", name: "My search", query, enabled: true, sort: 0, createdAt: data.exportedAt, updatedAt: data.exportedAt }];
+    if (query) agentSearches = [{ id: "agent-search-legacy", name: "My search", source: null, query, enabled: true, sort: 0, createdAt: data.exportedAt, updatedAt: data.exportedAt }];
   }
-  if (agentSearches.length > MAX_AGENT_SEARCHES) throw new ActionError("Keep at most three Agent searches.");
+  if (agentSearches.length > MAX_AGENT_SEARCHES) throw new ActionError(MAX_AGENT_SEARCHES_TEXT);
   agentSearches = agentSearches.map((search) => {
     const parsed = agentSearchInputSchema.safeParse(search);
     if (!parsed.success) throw new ActionError(`That export has an invalid Agent search: ${parsed.error.issues[0].message}`);
