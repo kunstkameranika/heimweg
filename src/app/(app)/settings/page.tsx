@@ -37,6 +37,9 @@ import { JobSearchSection } from "./job-search-section";
 import { ScoringSection } from "./scoring-section";
 import { AboutSection, type AboutFacts, type UsagePingView } from "./about-section";
 import { ConnectorSection } from "./connector-section";
+import { listWatchedCompanies } from "@/lib/brands/companies";
+
+import { BrandWatchSection } from "./brand-watch-section";
 import { settingsSectionFromParam } from "./sections";
 import { SettingsScreen } from "./settings-screen";
 
@@ -77,6 +80,8 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
           timeZone={await lastKnownTimeZone()}
           onlyWhileOpen={isDesktopApp()}
         />
+      ) : section === "brands" ? (
+        <BrandWatchSection initial={await listWatchedCompanies()} />
       ) : section === "google" ? (
         <>
           <GoogleNotice outcome={typeof params.google === "string" ? params.google : null} />

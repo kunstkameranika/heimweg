@@ -92,6 +92,17 @@ export const SOURCE_INFO: Record<JobSource, SourceInfo> = {
     // It has a city filter, but only for the names it knows, and a country with it widens rather than narrows.
     radius: false,
   },
+  BRANDS: {
+    name: "Brand watch",
+    description: "Every open role at the companies you follow, read from their own careers pages (Greenhouse, Lever and Ashby).",
+    tag: "Companies you choose · free, no key · no distance filter",
+    keyUrl: null,
+    quotaPeriod: null,
+    attribution: null,
+    attributionLink: null,
+    countries: null,
+    radius: false,
+  },
 };
 
 /** FreeHire's public catalogue; DOSSIER_FREEHIRE_URL can name a self-hosted one instead. */

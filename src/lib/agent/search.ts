@@ -7,7 +7,7 @@ import { EMPTY_QUERY, searchQuerySchema, type JobSource, type SearchQuery } from
 export { MAX_AGENT_SEARCHES, MAX_AGENT_SEARCHES_TEXT } from "./limits";
 
 /** The sources a search may name; the agent never searches the Bundesagentur (#223). */
-export const AGENT_SOURCES = [PostingSource.JSEARCH, PostingSource.ADZUNA, PostingSource.FREEHIRE] as const;
+export const AGENT_SOURCES = [PostingSource.JSEARCH, PostingSource.ADZUNA, PostingSource.FREEHIRE, PostingSource.BRANDS] as const;
 export type AgentSource = (typeof AGENT_SOURCES)[number];
 
 export const agentSearchInputSchema = z.object({

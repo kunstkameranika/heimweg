@@ -49,6 +49,11 @@ test("multiple searches persist CRUD/order/toggles, enforce the cap across tabs,
   await addSearch(page, "Design");
   await addSearch(page, "Remote");
   const original = await names();
+  // Seven more, so the next one takes the last of the ten slots.
+  await sql(`INSERT INTO "AgentSearch" (id, name, query, enabled, sort, "updatedAt")
+    SELECT 'filler-' || n, 'Filler ' || n, '{"keywords":"x","place":"","country":"nl","radiusKm":25,"remoteOnly":false,"postedWithin":"any"}', false, 50 + n, now()
+    FROM generate_series(1, 7) AS n`);
+  await page.reload();
 
   // A second tab opens an editor before the first tab fills the last slot.
   // Its eventual submit exercises the real server cap, not just disabled UI.
@@ -60,10 +65,12 @@ test("multiple searches persist CRUD/order/toggles, enforce the cap across tabs,
   await other.getByLabel("Country", { exact: true }).selectOption("nl");
   await addSearch(page, "<script>literal</script>");
   await other.getByRole("button", { name: "Save search", exact: true }).click();
-  await expect(other.getByRole("form").getByRole("alert")).toContainText("three");
-  expect(await names()).toHaveLength(3);
+  await expect(other.getByRole("form").getByRole("alert")).toContainText("ten");
+  expect(await names()).toHaveLength(10);
   await other.close();
   await expect(page.getByRole("button", { name: "Add search", exact: true })).toBeDisabled();
+  await sql(`DELETE FROM "AgentSearch" WHERE id LIKE 'filler-%'`);
+  await page.reload();
 
   await page.getByRole("button", { name: "Edit Design", exact: true }).click();
   await page.getByLabel("Search name", { exact: true }).fill("Renamed design");
@@ -167,7 +174,7 @@ test("all searches share scores/quota, retain partial source results and immutab
   await expect(page.getByText(/Unavailable: JSearch isn't answering right now/).first()).toBeVisible({ timeout: 30_000 });
   await expect(page.getByRole("button", { name: "Run all now", exact: true })).toBeVisible();
   expect(await fakeJobSearches()).toBe(before + 3);
-  await expect(page.getByText("0 of 3 in the rolling 24-hour budget", { exact: true })).toBeVisible();
+  await expect(page.getByText("7 of 10 in the rolling 24-hour budget", { exact: true })).toBeVisible();
   await expect(page.getByText("Scored postings", { exact: true })).toBeVisible();
   expect(await sql(`SELECT count(*)::int AS count FROM "AgentCandidate"`)).toEqual([{ count: 2 }]);
   expect(await sql(`SELECT "searchName", count(*)::int AS count FROM "AgentCandidateSearch" GROUP BY "searchName" ORDER BY "searchName"`)).toEqual([{ searchName: "Design", count: 2 }, { searchName: "Overlap", count: 2 }]);
@@ -175,7 +182,7 @@ test("all searches share scores/quota, retain partial source results and immutab
   await expect(page.getByText(/Design: 3 found · 3 new to agent · Source request completed/)).toBeVisible();
   await expect(page.getByText(/Overlap: 3 found · 3 new to agent · Source request completed/)).toBeVisible();
   await page.getByRole("button", { name: "Run all now", exact: true }).click();
-  await expect(page.getByText(/The agent needs 3 source requests, but may use only 3 in 24 hours/)).toBeVisible();
+  await expect(page.getByText(/The agent ran less than an hour ago/)).toBeVisible();
   expect(await fakeJobSearches()).toBe(before + 3);
   await accessible(page);
   await capture(page, "agent-searches-results-desktop");

@@ -662,6 +662,8 @@ enum PostingSource {
   ADZUNA
   ARBEITSAGENTUR
   FREEHIRE
+  /// Brand watch: the public careers feeds of companies the user follows.
+  BRANDS
 }
 
 /// A posting from Find jobs that the user kept (E14-5): saved, dismissed, or
@@ -1062,4 +1064,29 @@ model AiUsage {
   createdAt    DateTime @default(now())
 
   @@index([createdAt])
+}
+
+// ─── Brand watch ─────────────────────────────────────────────────────────────
+
+/** The hiring systems with public job feeds that Brand watch can read. */
+enum CareersBoard {
+  GREENHOUSE
+  LEVER
+  /// Lever's EU instance (jobs.eu.lever.co).
+  LEVER_EU
+  ASHBY
+}
+
+/** A company whose open roles Brand watch reads from its careers feed. */
+model WatchedCompany {
+  id        String       @id @default(cuid())
+  name      String
+  board     CareersBoard
+  /** The company's name on its board, as in jobs.lever.co/<slug>. */
+  slug      String
+  enabled   Boolean      @default(true)
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  @@unique([board, slug])
 }

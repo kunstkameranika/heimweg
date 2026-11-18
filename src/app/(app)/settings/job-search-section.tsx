@@ -130,7 +130,9 @@ export function JobSearchSection({ initial }: { initial: JobSearchSettingsView }
       {source !== "OFF" && (
         <>
           <p role="note" className="rounded-card bg-warning-surface px-4 py-3 text-meta text-warning">
-            Your searches (keywords, place and filters) go to {SOURCE_INFO[source].name}. Nothing from your profile does.
+            {source === "BRANDS"
+              ? "Brand watch reads the companies' public careers pages and filters them on your server. Your searches and profile stay here."
+              : `Your searches (keywords, place and filters) go to ${SOURCE_INFO[source].name}. Nothing from your profile does.`}
           </p>
 
           <Card className="flex flex-col gap-5">
@@ -171,6 +173,12 @@ export function JobSearchSection({ initial }: { initial: JobSearchSettingsView }
                 <ArbeitsagenturNote accepted={Boolean(view.arbeitsagentur.acceptedAt)} onAccept={acceptArbeitsagentur} />
                 <p className="text-sm text-muted">No key needed. The job agent doesn&apos;t search this source; choose JSearch, Adzuna or FreeHire for it.</p>
               </>
+            )}
+            {source === "BRANDS" && (
+              <p className="text-sm text-muted">
+                No key needed. Dossier reads the companies you follow in{" "}
+                <a href="/settings?section=brands" className="underline underline-offset-2">Settings → Brand watch</a>.
+              </p>
             )}
             {source === "FREEHIRE" && (
               <p className="text-sm text-muted">
